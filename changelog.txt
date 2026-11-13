@@ -1,0 +1,166 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.9.3
+Date: 2026-11-13
+  Changes:
+    - Mining a launchpad (by hand, robot or space platform) packs up the swarm circling over it: those drones come back as items along with the pad, so moving a launchpad no longer costs a swarm. A launchpad that's destroyed still loses its circling swarm.
+---------------------------------------------------------------------------------------------------
+Version: 0.9.2
+Date: 2026-11-13
+  Bugfixes:
+    - Drones go after nests and worms first: they reach 36 tiles for nests and worms (28 for biters), and a drone shooting a biter switches as soon as a nest or worm comes within reach.
+---------------------------------------------------------------------------------------------------
+Version: 0.9.1
+Date: 2026-11-13
+  Features:
+    - Circuit connection on the launchpad's bottom-right corner. It outputs three signals: attack drones in the launchpad, attack drones circling it, and attack in progress (1 or 0). Like any chest, it also outputs its contents.
+  Graphics:
+    - Launchpad sprite moved down about half a tile to fill its footprint (no more gap along the bottom row).
+---------------------------------------------------------------------------------------------------
+Version: 0.9.0
+Date: 2026-11-13
+  Changes:
+    - One attack at a time per launchpad: after a swarm flies out, the pad launches just enough drones for the next one, which circles the pad until the last swarm's attack run is over, then flies out. No more endless launching.
+---------------------------------------------------------------------------------------------------
+Version: 0.8.2
+Date: 2026-11-13
+  Features:
+    - "Hard mode" startup setting (off by default): attack drones need a laser turret in their recipe.
+---------------------------------------------------------------------------------------------------
+Version: 0.8.1
+Date: 2026-11-13
+  Features:
+    - Swarms reveal the map like artillery: they chart a 96-tile square around the leader every second on the way out, and around the target while attacking.
+  Graphics:
+    - New drone item icon and research icons from the full-quality renders.
+---------------------------------------------------------------------------------------------------
+Version: 0.8.0
+Date: 2026-11-13
+  Features:
+    - Drone endurance research: attack runs last 15 s to start with, 30 s with level 1 and 60 s with level 2.
+    - Swarm size research: launchpads can send swarms of up to 5 drones to start with, 10 with level 1 and 30 with level 2.
+  Changes:
+    - The launchpad's squad size slider only goes as high as your research allows. A launchpad set higher (e.g. from a blueprint) uses the most it's allowed.
+---------------------------------------------------------------------------------------------------
+Version: 0.7.0
+Date: 2026-11-13
+  Features:
+    - Laser damage research boosts attack drones, like any other laser. Each laser damage research now also lists "Attack drone laser damage: +X%" in its effects.
+    - The attack drone item tooltip shows its laser damage, laser range, attack run length and how far away it finds nests.
+    - The launchpad panel shows the drones' current laser damage, including research.
+---------------------------------------------------------------------------------------------------
+Version: 0.6.7
+Date: 2026-11-13
+  Changes:
+    - Beams simply switch off at the end of a pulse again (no shrinking into the target). RETRACT = true in control.lua brings it back.
+---------------------------------------------------------------------------------------------------
+Version: 0.6.6
+Date: 2026-11-13
+  Changes:
+    - No more sprinting stragglers: a drone that misses the meet-up catches up at only 1.15x to 1.4x its normal speed, just fast enough to make it by the time the swarm reaches the target. Slotting in right as the attack starts is fine.
+    - Timing the meet-up tops out at 1.3x (was 1.35x), and wingmen waiting to break off at the start of an attack no longer chase the leader's tight turn.
+  Bugfixes:
+    - Drones no longer jump about 1.5 tiles on their first tick: they start at the runway's tower end.
+---------------------------------------------------------------------------------------------------
+Version: 0.6.5
+Date: 2026-11-13
+  Changes:
+    - Attack runs start like a break: the leader peels off first and the wingmen follow one by one over the next second or so, each banking the way it will circle (right for clockwise, left for counter-clockwise) and taking its own line in.
+    - Smoother banking in tight turns (WePlay: Flight Library 0.1.5).
+---------------------------------------------------------------------------------------------------
+Version: 0.6.4
+Date: 2026-11-13
+  Changes:
+    - Smoother flight between targets: each drone wanders much less around its spot in the cloud (0.5 tiles instead of 2.5).
+    - Laser pearls are off. The pulsing beams carry the look on their own. (BEADS = true in control.lua brings them back.)
+---------------------------------------------------------------------------------------------------
+Version: 0.6.3
+Date: 2026-11-13
+  Changes:
+    - End of a pulse: the beam lets go of the drone and shrinks down into the target, carrying its last pearls with it, instead of vanishing and leaving the pearls flying on their own.
+---------------------------------------------------------------------------------------------------
+Version: 0.6.2
+Date: 2026-11-13
+  Changes:
+    - Far fewer laser pearls (about a fifth as many), leaving the drone at random gaps instead of evenly spaced.
+---------------------------------------------------------------------------------------------------
+Version: 0.6.1
+Date: 2026-11-13
+  Bugfixes:
+    - Fixed drones meeting up, then flying back toward the launchpad and returning: the swarm is now led by whichever drone can reach the rally point soonest, instead of the first one launched (which sometimes had to loop back past the pad).
+    - Fixed quick little loops after the meet-up: a drone that gets ahead of its spot eases off instead of circling back (WePlay: Flight Library 0.1.4), and one that reaches the rally point before the leader carries on slowly instead of turning back for it.
+---------------------------------------------------------------------------------------------------
+Version: 0.6.0
+Date: 2026-11-13
+  Changes:
+    - Renamed: the mod is now WePlay: Laser-Equipped Drone Swarms (WePlayDroneSwarms). Not compatible with saves using WePlayAttackDrones.
+    - The swarm meets up on the way to the target instead of on the leader: everyone flies to a rally point about 30% of the way there (40 to 200 tiles out), each to its own spot in the cloud, with speeds timed so they arrive together. Then the cloud carries on to the nest. Moving from nest to nest works the same way.
+    - The clear command is now /wp-drone-swarms-clear.
+---------------------------------------------------------------------------------------------------
+Version: 0.5.1
+Date: 2026-11-13
+  Changes:
+    - Drones joining the swarm no longer sprint to catch up. Each one gets just enough extra speed (1.25x to 2x its own) to reach its spot about a third of the way to the target.
+---------------------------------------------------------------------------------------------------
+Version: 0.5.0
+Date: 2026-11-13
+  Features:
+    - Pulse-laser pearls: bright beads run down every beam from drone to target, like a string of pearls (or a snake that swallowed an egg). They swell a little on the way, and the last ones of a pulse still land after the beam switches off.
+---------------------------------------------------------------------------------------------------
+Version: 0.4.0
+Date: 2026-11-13
+  Changes:
+    - Drones are a swarm now, not a formation. Over the launchpad they circle on their own rings (14 to 29 tiles out) in both directions, like over a nest.
+    - In flight between targets the squad is a loose cloud behind its leader, each drone wandering around its spot, instead of a neat V.
+    - Everything wobbles out of step: rings drift in and out, speed and altitude rise and fall.
+    - Drones out of position turn in arcs instead of snapping round (WePlay: Flight Library 0.1.3), which fixes the jitter when a squad leaves one nest for the next.
+---------------------------------------------------------------------------------------------------
+Version: 0.3.1
+Date: 2026-11-13
+  Bugfixes:
+    - Fixed a crash when a drone's target died while its laser was on.
+    - Less bank and heading flicker in tight turns (WePlay: Flight Library 0.1.2).
+  Features:
+    - /wp-attack-drones-clear console command: removes every attack drone in the air (admins only).
+---------------------------------------------------------------------------------------------------
+Version: 0.3.0
+Date: 2026-11-13
+  Features:
+    - When a nest is cleared, the squad forms back up and flies to the nearest nest left (within 1000 tiles). The attack timer keeps running from nest to nest, so a squad can run out and crash on the way.
+    - Pulsing lasers are back and are now the default: 3 s on, 1 s off. Continuous is still a map setting.
+  Changes:
+    - Laser damage cut to a third (about 17 per second per drone).
+    - Beams are drawn underneath the drones instead of over them.
+---------------------------------------------------------------------------------------------------
+Version: 0.2.1
+Date: 2026-11-13
+  Bugfixes:
+    - Fixed a crash when a drone launched before 0.2.0 fired its laser.
+  Changes:
+    - The launchpad panel shows how many drones it has launched and how many of its drones are in the air.
+---------------------------------------------------------------------------------------------------
+Version: 0.2.0
+Date: 2026-11-13
+  Features:
+    - Attack runs look like crows over a nest: when the squad arrives it breaks formation and every drone circles on its own ring (8 to 23 tiles out), some clockwise and some counter-clockwise, at slightly different speeds and with tighter turns.
+    - New lasers: each drone locks a glowing green beam onto its target and keeps it there, with a light where it hits. Map setting "Laser style" switches to pulsing beams. Damage per second is the same either way (50 per drone).
+    - The launchpad panel says why it isn't launching: out of drones, low power, squad forming up, or no charted nests in range.
+  Changes:
+    - Squads now circle the launchpad itself while forming up, instead of a spot 40 tiles down the runway.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.1
+Date: 2026-11-13
+  Bugfixes:
+    - Fixed the game failing to load: drone sprites are now one animation per bank (64 frames each) instead of one 320-frame animation. Factorio allows at most 255 frames per animation.
+  Changes:
+    - Drone sprite sheets and their metadata (drone-animations.lua) live in Sheets/, straight from the packer, so a repack is drop-in.
+    - Needs WePlay: Flight Library 0.1.1.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 2026-11-13
+  Features:
+    - First version. Attack drone launchpad and attack drones, unlocked by the Attack drones research.
+    - Drones launch one at a time and circle the launchpad in a V formation until the squad is full (squad size set in the launchpad's panel, 1 to 30).
+    - Full squads fly to the nearest charted nest within 1000 tiles, circle it and laser nests, worms and defenders, then move on to nearby nests.
+    - 30 second attack run, then the drones crash.
+    - Nests retaliate against the launchpad, like artillery.
+    - Built on WePlay: Flight Library.
