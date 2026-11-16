@@ -1,12 +1,12 @@
 {
   "name": "WePlayDroneSwarms",
-  "version": "0.9.3",
+  "version": "0.10.4",
   "title": "WePlay: Laser-Equipped Drone Swarms",
   "author": "afewvowels",
   "factorio_version": "2.1",
   "dependencies": [
     "base >= 2.1",
-    "WePlayFlightLib >= 0.1.5"
+    "WePlayFlightLib >= 0.1.9"
   ],
   "description": "Swarms of laser drones that clear biter nests far beyond your walls. Drones launch one at a time and circle the launchpad until the swarm is ready, then fly out together, whirl around the nests and pulse-laser everything in sight. An alternative to artillery."
 }

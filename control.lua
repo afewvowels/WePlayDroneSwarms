@@ -55,11 +55,29 @@ local CATCH_UP_MIN, CATCH_UP_MAX = 1.15, 1.4
 
 -- Finding targets
 local TARGET_RANGE = SHARED.TARGET_RANGE -- tiles from the pad; only charted nests count
-local TARGET_RETRY = 300             -- ticks between searches when nothing is in range
+local TARGET_RETRY = 300             -- ticks between searches when nothing is in range...
+local TARGET_RETRY_MAX = 1800        -- ...doubling each time nothing turns up, up to 30 s
+local SEARCH_RINGS = { 100, 250, 500 } -- search these radii first (then the full range): close nests are cheap to find
 -- Map reveal: like artillery, the swarm charts the map around itself on the way
 -- out and over the target, so you see where it went and what it hit.
 local REVEAL_RADIUS = 48             -- tiles around the leader (in flight) or the target (attacking)
 local REVEAL_INTERVAL = 60           -- ticks between reveals
+-- Culling: drones farther than this from every player's view (including remote
+-- view) keep flying and fighting but skip all drawing.
+-- Map marks ("Show swarm targets on the map" setting): a line from each swarm
+-- out on a run to its target, shrinking as it closes in, and a ring on the target.
+local MAP_MARK_COLOR = { 1, 0.25, 0.2, 0.8 }
+-- Map lines scale with map zoom (their width is in 1/32 tiles), so they have to be
+-- a tile or so wide to still show when zoomed out far enough to see a whole run.
+local MAP_MARK_WIDTH = 48            -- 1.5 tiles
+local MAP_MARK_DASH, MAP_MARK_GAP = 8, 5 -- tiles
+-- The ring marks the area the swarm works over (its outer circle plus some laser
+-- reach), not one nest: the drones hit everything in there.
+local MAP_MARK_RADIUS = 30
+local MAP_MARK_INTERVAL = 10
+
+local CULL_RADIUS = 160
+local CULL_INTERVAL = 30             -- ticks between visibility checks
 local CLUSTER_RADIUS = 32            -- nests this close to another squad's target are left to that squad
 
 -- Attack run: like crows over a carcass. Each drone circles the nest on its own
@@ -398,6 +416,8 @@ local function chunk_charted(force, surface, position)
   return force.is_chunk_charted(surface, { x = math.floor(position.x / 32), y = math.floor(position.y / 32) })
 end
 
+local find_nest_within
+
 -- Nearest charted enemy nest within `range` of `from` that no other squad is after.
 local function find_nest(surface, force, from, range, me)
   local taken = {}
@@ -406,6 +426,18 @@ local function find_nest(surface, force, from, range, me)
       taken[#taken + 1] = squad.center
     end
   end
+  -- Nearest ring first: a nest found within 100 tiles is the nearest anywhere, so
+  -- there's no need to scan all ~3000 chunks of a 1000-tile circle.
+  for _, radius in ipairs(SEARCH_RINGS) do
+    if radius < range then
+      local nest, distance = find_nest_within(surface, force, from, radius, me, taken)
+      if nest then return nest, distance end
+    end
+  end
+  return find_nest_within(surface, force, from, range, me, taken)
+end
+
+function find_nest_within(surface, force, from, range, me, taken)
   local best, best_d
   for _, nest in pairs(surface.find_entities_filtered({
     type = "unit-spawner", position = from, radius = range, force = "enemy",
@@ -506,6 +538,11 @@ local function launch(pad)
   local tower_end = offset(e.position, runway_dir(pad), -Flight.DEFAULTS.runway_back)
   local options = { surface = e.surface, position = tower_end, direction = pad.direction }
   for k, v in pairs(DRONE_LOOKS) do options[k] = v end
+  -- Drone dots on the map follow the "Show swarms on the map" setting.
+  options.map = {
+    sprite = DRONE_LOOKS.map.sprite, tint = DRONE_LOOKS.map.tint, scale = DRONE_LOOKS.map.scale,
+    visible = settings.global["wp-drone-swarms-map-marks"].value,
+  }
   local f = Flight.new(options)
   init_swarm(f)
   f.wp_phase = math.random(0, PULSE_ON + PULSE_OFF)
@@ -550,7 +587,46 @@ local function attack_out(pad)
   return out ~= nil and out.state ~= "crash"
 end
 
+local function clear_map_marks(squad)
+  for _, key in pairs({ "r_route", "r_target" }) do
+    local r = squad[key]
+    if r and r.valid then r.destroy() end
+    squad[key] = nil
+  end
+end
+
+local function update_map_marks(squad)
+  local leader = squad.leader
+  if not (leader and squad.center) or leader.dead then return clear_map_marks(squad) end
+  -- The ring around the area under attack: while flying there and while attacking.
+  if not (squad.r_target and squad.r_target.valid) or squad.marked_center ~= squad.center then
+    if squad.r_target and squad.r_target.valid then squad.r_target.destroy() end
+    squad.r_target = rendering.draw_circle({
+      color = MAP_MARK_COLOR, radius = MAP_MARK_RADIUS, width = MAP_MARK_WIDTH, filled = false,
+      target = squad.center, surface = squad.surface,
+      forces = { squad.force }, render_mode = "chart",
+    })
+    squad.marked_center = squad.center
+  end
+  -- The line to it: only on the way there. Once they're attacking, it's just the ring.
+  if squad.state ~= "transit" then
+    if squad.r_route and squad.r_route.valid then squad.r_route.destroy() end
+    squad.r_route = nil
+    return
+  end
+  if not (squad.r_route and squad.r_route.valid) then
+    squad.r_route = rendering.draw_line({
+      color = MAP_MARK_COLOR, width = MAP_MARK_WIDTH, gap_length = MAP_MARK_GAP, dash_length = MAP_MARK_DASH,
+      from = leader.pos, to = squad.center, surface = squad.surface,
+      forces = { squad.force }, render_mode = "chart",
+    })
+  end
+  squad.r_route.from = { x = leader.pos.x, y = leader.pos.y }
+  squad.r_route.to = squad.center
+end
+
 function start_crash(squad)
+  clear_map_marks(squad)
   release_claim(squad)
   squad.state = "crash"
   for _, f in pairs(squad.drones) do
@@ -565,6 +641,7 @@ function start_crash(squad)
 end
 
 local function end_squad(squad)
+  clear_map_marks(squad)
   release_claim(squad)
   for _, f in pairs(squad.drones) do
     beam_destroy(f)
@@ -588,7 +665,8 @@ end
 -- without it (target lost, regrouping) they vanish too.
 local function beam_off(f)
   local b = f.wp_beam
-  if not b then return end
+  if not b or b.dark then return end -- already off: nothing to touch (each touch is an API call)
+  b.dark = true
   for _, key in pairs(BEAM_PARTS) do
     local r = b[key]
     if r and r.valid then r.visible = false end
@@ -664,12 +742,6 @@ local function update_beads(squad, b, from, to, tick, on, tail)
   end
 end
 
-local function in_range(f, target)
-  local g = Flight.ground(f)
-  local dx, dy = target.position.x - g.x, target.position.y - g.y
-  return dx * dx + dy * dy <= (ENGAGE_RANGE + 4) ^ 2
-end
-
 -- Nests and worms always come first: a drone only shoots biters when there are no
 -- nests or worms within reach.
 local function find_primary(squad, f)
@@ -691,8 +763,8 @@ local function pick_target(squad, f)
 end
 
 local function in_range(f, target)
-  local g = Flight.ground(f)
-  local dx, dy = target.position.x - g.x, target.position.y - g.y
+  local g, p = Flight.ground(f), target.position
+  local dx, dy = p.x - g.x, p.y - g.y
   local reach = PRIMARY_LOOKUP[target.type] and PRIMARY_REACH or ENGAGE_RANGE
   return dx * dx + dy * dy <= (reach + 4) ^ 2
 end
@@ -724,7 +796,7 @@ end
 
 -- Point the beam at a target, making its parts if needed. Returns true when it
 -- just switched on (for the sound).
-local function beam_aim(squad, f, target, tick)
+local function beam_aim(squad, f, target, target_pos, tick)
   local b = f.wp_beam
   if not b then
     b = {}
@@ -738,13 +810,17 @@ local function beam_aim(squad, f, target, tick)
   local surface = squad.surface
   -- Each part is checked on its own: a light attached to a target is destroyed
   -- by the game along with that target.
-  if not (b.beam and b.beam.valid) then
+  -- Validity is checked when the beam comes on and once a second. Only this mod
+  -- destroys the beam and muzzle; the spark goes with its target, so it's
+  -- rechecked whenever the target changes.
+  local check = not b.on or tick % 60 == 0
+  if not b.beam or (check and not b.beam.valid) then
     b.beam = rendering.draw_sprite({
       sprite = BEAM_SPRITE, target = from, surface = surface, render_layer = BEAM_LAYER, visible = false,
     })
     b.on = false
   end
-  if not (b.spark and b.spark.valid) or b.spark_for ~= target then
+  if b.spark_for ~= target or not b.spark or (check and not b.spark.valid) then
     if b.spark and b.spark.valid then b.spark.destroy() end
     b.spark = rendering.draw_light({
       sprite = "utility/light_small", target = target, surface = surface,
@@ -752,14 +828,15 @@ local function beam_aim(squad, f, target, tick)
     })
     b.spark_for = target
   end
-  if not (b.muzzle and b.muzzle.valid) then
+  if not b.muzzle or (check and not b.muzzle.valid) then
     b.muzzle = rendering.draw_light({
       sprite = "utility/light_small", target = from, surface = surface,
       color = LASER_COLOR, intensity = 0.7, scale = 0.4, visible = b.on,
     })
   end
-  place_beam(b.beam, from, target.position, tick, f.wp_phase)
+  place_beam(b.beam, from, target_pos, tick, f.wp_phase)
   b.muzzle.target = from
+  b.dark = false
   if not b.on then
     for _, key in pairs(BEAM_PARTS) do b[key].visible = true end
     b.on = true
@@ -774,7 +851,9 @@ local function update_laser(squad, f, tick, cause, pulsing)
   -- Drones launched before 0.2.0 have no pulse phase yet.
   if not f.wp_phase then f.wp_phase = math.random(0, PULSE_ON + PULSE_OFF) end
   local target = f.wp_target
-  if not (target and target.valid and in_range(f, target)) then
+  local ok = target and target.valid
+  if ok and (tick + f.wp_phase) % 10 == 0 then ok = in_range(f, target) end -- range: 6 times a second is plenty
+  if not ok then
     target = nil
     f.wp_target = nil
     beam_off(f)
@@ -783,7 +862,8 @@ local function update_laser(squad, f, tick, cause, pulsing)
     target = pick_target(squad, f)
     if not target then return end
     f.wp_target = target
-  elseif not PRIMARY_LOOKUP[target.type] and tick >= (f.wp_next_search or 0) then
+    f.wp_target_primary = PRIMARY_LOOKUP[target.type] or false
+  elseif not f.wp_target_primary and tick >= (f.wp_next_search or 0) then
     -- Shooting a biter: switch the moment a nest or worm comes within reach.
     f.wp_next_search = tick + RETARGET_INTERVAL
     local primary = find_primary(squad, f)
@@ -791,6 +871,7 @@ local function update_laser(squad, f, tick, cause, pulsing)
       beam_off(f)
       target = primary
       f.wp_target = target
+      f.wp_target_primary = true
     end
   end
 
@@ -829,13 +910,21 @@ local function update_laser(squad, f, tick, cause, pulsing)
     return
   end
 
-  if beam_aim(squad, f, target, tick) and (not squad.sound_tick or tick - squad.sound_tick >= 12) then
+  if f.hidden then
+    -- Nobody's looking: fight on without drawing the beam.
+    if (tick + f.wp_phase) % DAMAGE_INTERVAL == 0 then
+      target.damage(laser_dps(squad.force) * DAMAGE_INTERVAL / 60 * scale, squad.force, "laser", nil, cause)
+    end
+    return
+  end
+  local target_pos = target.position
+  if beam_aim(squad, f, target, target_pos, tick) and (not squad.sound_tick or tick - squad.sound_tick >= 12) then
     squad.sound_tick = tick
     if helpers.is_valid_sound_path("wp-attack-drone-laser") then
       squad.surface.play_sound({ path = "wp-attack-drone-laser", position = Flight.air(f) })
     end
   end
-  update_beads(squad, f.wp_beam, Flight.air(f), target.position, tick, true)
+  update_beads(squad, f.wp_beam, Flight.air(f), target_pos, tick, true)
   if (tick + f.wp_phase) % DAMAGE_INTERVAL == 0 then
     -- The pad is the "cause", so the nests send their revenge at it, like artillery.
     target.damage(laser_dps(squad.force) * DAMAGE_INTERVAL / 60 * scale, squad.force, "laser", nil, cause)
@@ -969,6 +1058,55 @@ local function enemies_near(surface, center)
   }) > 0
 end
 
+-- Where players are looking, per surface: { surface_index = { {x, y}, ... } }.
+local function player_views()
+  local views = {}
+  for _, player in pairs(game.connected_players) do
+    local surface = player.surface -- the surface being viewed (remote view included)
+    if surface and surface.valid then
+      local list = views[surface.index]
+      if not list then list = {} views[surface.index] = list end
+      list[#list + 1] = player.position -- the camera position in remote view
+    end
+  end
+  return views
+end
+
+local DRAWN = { "r_body", "r_shadow", "r_glow" }
+
+-- Show or hide one drone. Hidden drones aren't drawn at all, so their sprites
+-- don't hang frozen in the air while the library skips updating them.
+local function set_culled(f, hidden)
+  if (f.hidden or false) == hidden then return end
+  f.hidden = hidden or nil
+  for _, key in pairs(DRAWN) do
+    local r = f[key]
+    if r and r.valid then r.visible = not hidden end
+  end
+  if hidden then
+    beam_off(f)
+  else
+    f.frame = -1 -- redraw on the next step
+  end
+end
+
+local function cull_squad(squad, views)
+  local list = views[squad.surface.index]
+  local r2 = CULL_RADIUS * CULL_RADIUS
+  for _, f in pairs(squad.drones) do
+    local seen = false
+    if list then
+      for _, p in pairs(list) do
+        local dx, dy = f.pos.x - p.x, f.pos.y - p.y
+        if dx * dx + dy * dy < r2 then seen = true break end
+      end
+    end
+    set_culled(f, not seen)
+  end
+end
+
+local show_map_marks = true -- refreshed from the map setting every tick
+
 local function update_squad(squad, tick, pulsing)
   if not squad.surface.valid then
     end_squad(squad)
@@ -1028,6 +1166,13 @@ local function update_squad(squad, tick, pulsing)
       })
     end
   end
+  if tick % MAP_MARK_INTERVAL == 0 then
+    if show_map_marks and (squad.state == "transit" or squad.state == "attack") then
+      update_map_marks(squad)
+    elseif squad.r_route or squad.r_target then
+      clear_map_marks(squad)
+    end
+  end
   if squad.state == "attack" then
     for _, f in pairs(survivors) do update_laser(squad, f, tick, cause, pulsing) end
     if tick >= squad.next_check then
@@ -1039,7 +1184,12 @@ local function update_squad(squad, tick, pulsing)
           claim(squad, nest)
           local from = squad.center
           squad.center = { x = nest.position.x, y = nest.position.y }
+          squad.retry = nil
           regroup(squad, from)
+        else
+          -- Nothing left nearby: circle on, and look again less and less often.
+          squad.retry = math.min(TARGET_RETRY_MAX, (squad.retry or 60) * 2)
+          squad.next_check = tick + squad.retry
         end
       end
     end
@@ -1075,9 +1225,11 @@ local function update_pads(tick)
       elseif tick >= (pad.next_search or 0) then
         if dispatch(squad, pad) then
           pad.status = "launching"
+          pad.retry = nil
         else
           pad.status = "no-target"
-          pad.next_search = tick + TARGET_RETRY
+          pad.retry = math.min(TARGET_RETRY_MAX, (pad.retry or TARGET_RETRY / 2) * 2)
+          pad.next_search = tick + pad.retry
         end
       end
     end
@@ -1088,7 +1240,12 @@ script.on_event(defines.events.on_tick, function(event)
   local tick = event.tick
   if tick % 10 == 0 then update_pads(tick) end
   local pulsing = settings.global["wp-attack-drone-laser-style"].value == "pulsing"
-  for _, squad in pairs(storage.squads) do update_squad(squad, tick, pulsing) end
+  show_map_marks = settings.global["wp-drone-swarms-map-marks"].value
+  local views = tick % CULL_INTERVAL == 0 and player_views()
+  for _, squad in pairs(storage.squads) do
+    if views and squad.surface.valid then cull_squad(squad, views) end
+    update_squad(squad, tick, pulsing)
+  end
   if tick % 28 == 0 and next(storage.squads) then
     local all = {}
     for _, squad in pairs(storage.squads) do
@@ -1366,3 +1523,13 @@ for _, name in pairs(PAD_NAMES) do mined_filter[#mined_filter + 1] = { filter = 
 script.on_event(defines.events.on_player_mined_entity, on_pad_mined, mined_filter)
 script.on_event(defines.events.on_robot_mined_entity, on_pad_mined, mined_filter)
 script.on_event(defines.events.on_space_platform_mined_entity, on_pad_mined, mined_filter)
+
+-- "Show swarms on the map" switched: show or hide every drone's map dot right away
+-- (the target lines and rings follow on their next update).
+script.on_event(defines.events.on_runtime_mod_setting_changed, function(event)
+  if event.setting ~= "wp-drone-swarms-map-marks" then return end
+  local show = settings.global["wp-drone-swarms-map-marks"].value
+  for _, squad in pairs(storage.squads) do
+    for _, f in pairs(squad.drones) do Flight.set_map_visible(f, show) end
+  end
+end)

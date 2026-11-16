@@ -1,4 +1,40 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.10.4
+Date: 2026-11-15
+  Optimizations:
+    - About 60% fewer API calls per drone per tick (with WePlay: Flight Library 0.1.9): sprites only rewrite what changed, beams skip validity checks between redraws, targets are range-checked 6 times a second instead of every tick, and switched-off beams aren't touched at all.
+---------------------------------------------------------------------------------------------------
+Version: 0.10.3
+Date: 2026-11-15
+  Changes:
+    - The map setting is now "Show swarms on the map" and covers the drones' map dots too, along with the target lines and rings. Turning it off hides them all straight away.
+---------------------------------------------------------------------------------------------------
+Version: 0.10.2
+Date: 2026-11-15
+  Changes:
+    - Map marks are thicker (1.5 tiles, with longer dashes), so they still show zoomed out.
+    - The line to the target only shows while the swarm is on its way. Once it's attacking, just the ring stays.
+    - The ring is bigger (30 tiles) and marks the whole area the swarm works over, not one nest.
+---------------------------------------------------------------------------------------------------
+Version: 0.10.1
+Date: 2026-11-15
+  Bugfixes:
+    - Fixed the mod failing to load without Space Age ("Surface conditions require space-travel"). The planets-only rule now only applies when space travel is turned on.
+  Graphics:
+    - New Attack drones research icon from the full-quality renders.
+---------------------------------------------------------------------------------------------------
+Version: 0.10.0
+Date: 2026-11-15
+  Features:
+    - "Show swarm targets on the map" map setting (on by default): a dashed line on the map from each swarm out on a run to its target, shrinking as they close in, and a ring around the target.
+  Changes:
+    - The launchpad is one-way: inserters can load drones in, but can't take them back out.
+    - With Space Age, launchpads can only be built on planets, not space platforms.
+    - Needs WePlay: Flight Library 0.1.8.
+  Optimizations:
+    - Drones far from every player's view (remote view included) keep flying and fighting but skip all drawing.
+    - Nest searches check close rings first (100, 250, 500 tiles) before the full 1000, and a swarm with nothing to attack searches less and less often (up to every 30 s) instead of scanning the whole range every 5 s.
+---------------------------------------------------------------------------------------------------
 Version: 0.9.3
 Date: 2026-11-13
   Changes:

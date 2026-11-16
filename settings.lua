@@ -18,3 +18,13 @@ data:extend({
     order = "b",
   },
 })
+
+data:extend({
+  {
+    type = "bool-setting",
+    name = "wp-drone-swarms-map-marks",
+    setting_type = "runtime-global",
+    default_value = true,
+    order = "a2",
+  },
+})

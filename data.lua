@@ -11,6 +11,14 @@ local PAD_ICON = MOD .. "graphics/icons/attack-drone-launchpad.png"
 local DRONE_ICON = MOD .. "graphics/icons/attack-drone.png"
 
 local PAD_COLLISION = { { -2.4, -2.4 }, { 2.4, 2.4 } }
+
+-- Space Age: planets only, not space platforms (there's nothing to hunt up there).
+-- Space Exploration already keeps buildings like this out of space on its own.
+-- Surface conditions only exist when space travel is on (Space Age, or another mod
+-- that turns it on); base 2.1 has a gravity property but refuses the conditions.
+local PLANETS_ONLY = feature_flags and feature_flags["space_travel"]
+  and data.raw["surface-property"] and data.raw["surface-property"]["gravity"]
+  and { { property = "gravity", min = 0.1 } } or nil
 local PAD_SELECTION = { { -2.5, -2.5 }, { 2.5, 2.5 } }
 local DIRECTIONS = { "north", "east", "south", "west" } -- frame order in the sheets
 
@@ -42,6 +50,7 @@ data:extend({
     icon = PAD_ICON,
     hidden_in_factoriopedia = true,
     flags = { "placeable-player", "player-creation", "not-upgradable" },
+    surface_conditions = PLANETS_ONLY,
     minable = { mining_time = 0.5, result = "wp-attack-drone-launchpad" },
     placeable_by = { item = "wp-attack-drone-launchpad", count = 1 },
     max_health = 800,
@@ -62,7 +71,9 @@ for frame, dir in pairs(DIRECTIONS) do
       localised_description = { "entity-description.wp-attack-drone-launchpad" },
       icon = PAD_ICON,
       hidden_in_factoriopedia = dir ~= "north",
-      flags = { "placeable-player", "player-creation" },
+      -- One-way: inserters can load drones in, but never take them back out.
+      flags = { "placeable-player", "player-creation", "no-automated-item-removal" },
+      surface_conditions = PLANETS_ONLY,
       minable = { mining_time = 0.5, result = "wp-attack-drone-launchpad" },
       placeable_by = { item = "wp-attack-drone-launchpad", count = 1 },
       max_health = 800,
